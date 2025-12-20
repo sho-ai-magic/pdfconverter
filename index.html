@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Converter Tool</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- FileSaver.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- PptxGenJS -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <!-- GIF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+    <!-- SortableJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Tesseract.js (For OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <style>
+        .drag-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .page-card {
+            transition: all 0.2s;
+        }
+        .page-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .sortable-ghost {
+            opacity: 0.5;
+            background: #e0e7ff;
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.75);
+        }
+        canvas {
+            touch-action: none;
+        }
+        /* Dropdown Menu Animation */
+        .menu-enter {
+            opacity: 0;
+            transform: scale(0.95) translateY(-10px);
+        }
+        .menu-enter-active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+        }
+        .menu-exit {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+        .menu-exit-active {
+            opacity: 0;
+            transform: scale(0.95) translateY(-10px);
+            transition: opacity 0.1s ease-in, transform 0.1s ease-in;
+        }
+        /* Toast Animation */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-enter {
+            animation: slideInRight 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+
+    <div class="container mx-auto px-4 py-6 max-w-6xl">
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-200 relative">
+            <div>
+                <h1 class="text-2xl font-bold text-indigo-600 flex items-center gap-2">
+                    <span class="text-3xl">📄</span> PDF変換・編集ツール
+                </h1>
+                <p class="text-xs text-gray-500 mt-1">並べ替え・回転・黒塗り・OCR・各種変換</p>
+            </div>
+
+            <!-- Hamburger / Download Menu Trigger -->
+            <div class="relative">
+                <button id="menu-btn" onclick="toggleMenu()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 font-bold z-50 relative">
+                    <span class="text-xl">📥</span>
+                    <span>保存・書き出し</span>
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+
+                <!-- Download Menu Dropdown -->
+                <div id="download-menu" class="hidden absolute right-0 top-full mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 z-40 origin-top-right transform transition-all duration-200">
+                    <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Download Options</span>
+                        <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600">&times;</button>
+                    </div>
+
+                    <div class="space-y-3 max-h-[70vh] overflow-y-auto custom-scrollbar pr-1">
+                        
+                        <!-- 1. PDF Item -->
+                        <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 hover:border-red-200 hover:bg-red-50/50 transition-colors group">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-white text-red-500 flex items-center justify-center text-xl shadow-sm">📄</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-gray-800">PDF再構築</h4>
+                                        <p class="text-[10px] text-gray-500">編集内容を反映して保存</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="convertPDF('pdf')" class="w-full py-2 bg-white border border-gray-200 text-red-600 text-sm font-bold rounded-lg hover:bg-red-500 hover:text-white hover:border-red-500 transition-colors shadow-sm">
+                                PDFとして保存
+                            </button>
+                        </div>
+
+                        <!-- 2. PNG Item -->
+                        <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-white text-indigo-500 flex items-center justify-center text-xl shadow-sm">🖼️</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-gray-800">画像 (PNG)</h4>
+                                        <p class="text-[10px] text-gray-500">全ページをZIPで保存</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="convertPDF('png')" class="w-full py-2 bg-white border border-gray-200 text-indigo-600 text-sm font-bold rounded-lg hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-colors shadow-sm">
+                                ZIPダウンロード
+                            </button>
+                        </div>
+
+                        <!-- 3. PPTX Item -->
+                        <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 hover:border-orange-200 hover:bg-orange-50/50 transition-colors group">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-white text-orange-500 flex items-center justify-center text-xl shadow-sm">📊</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-gray-800">PowerPoint</h4>
+                                        <p class="text-[10px] text-gray-500">スライドとして保存</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Settings -->
+                            <div class="bg-white rounded border border-gray-100 p-2 mb-2 text-xs space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" id="pptx-hide-logo" class="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300">
+                                        <span class="ml-1.5 text-gray-600 font-medium">NotebookLMロゴマスク</span>
+                                    </label>
+                                    <div class="flex items-center gap-1" title="マスクの色を変更">
+                                        <span class="text-[10px] text-gray-400">色:</span>
+                                        <input type="color" id="pptx-mask-color" value="#FFFFFF" class="w-6 h-6 rounded cursor-pointer border border-gray-300 p-0.5 bg-white shadow-sm hover:border-orange-400 transition-colors">
+                                    </div>
+                                </div>
+                                <div class="flex items-center border-t border-gray-100 pt-2">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" id="pptx-speaker-notes" class="rounded text-orange-500 focus:ring-orange-500 w-3.5 h-3.5 border-gray-300">
+                                        <span class="ml-1.5 text-gray-600 font-medium">テキストをノートへ</span>
+                                    </label>
+                                </div>
+                                
+                                <!-- SVG Format Selection REMOVED -->
+                            </div>
+
+                            <button onclick="convertPDF('pptx')" class="w-full py-2 bg-white border border-gray-200 text-orange-600 text-sm font-bold rounded-lg hover:bg-orange-500 hover:text-white hover:border-orange-500 transition-colors shadow-sm">
+                                PPTXダウンロード
+                            </button>
+                        </div>
+
+                        <!-- 4. GIF Item -->
+                        <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 hover:border-green-200 hover:bg-green-50/50 transition-colors group">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-white text-green-500 flex items-center justify-center text-xl shadow-sm">🎬</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-gray-800">GIFアニメ</h4>
+                                        <p class="text-[10px] text-gray-500">パラパラ漫画風に保存</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Settings -->
+                            <div class="bg-white rounded border border-gray-100 p-2 mb-2 text-xs flex items-center justify-center gap-2">
+                                <span class="text-gray-600 font-medium">切替間隔:</span>
+                                <input type="number" id="gif-interval" value="1.5" min="0.1" step="0.1" class="w-14 py-0.5 px-1 text-center border border-gray-300 rounded text-gray-700 focus:border-green-500 focus:ring-1 focus:ring-green-500">
+                                <span class="text-gray-500">秒</span>
+                            </div>
+
+                            <button onclick="convertPDF('gif')" class="w-full py-2 bg-white border border-gray-200 text-green-600 text-sm font-bold rounded-lg hover:bg-green-500 hover:text-white hover:border-green-500 transition-colors shadow-sm">
+                                GIF生成
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Drop Zone -->
+        <div id="drop-zone" class="bg-white border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer transition-colors duration-200 hover:border-indigo-400 mb-8 shadow-sm">
+            <div class="flex flex-col items-center justify-center space-y-4">
+                <svg class="w-16 h-16 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <div class="text-lg font-medium text-gray-700">PDFファイルをここにドラッグ＆ドロップ</div>
+                <div class="text-sm text-gray-500 my-2">または</div>
+                <label for="file-input" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition cursor-pointer shadow-md flex items-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span>ファイルを選択</span>
+                </label>
+                
+                <!-- OCR Checkbox -->
+                <div class="mt-4 pt-4 border-t border-gray-100 w-full max-w-md mx-auto flex items-center justify-center">
+                    <label class="flex items-center cursor-pointer bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition">
+                        <input type="checkbox" id="enable-ocr" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300">
+                        <span class="ml-2 text-sm text-gray-700 font-medium">OCR（文字認識）を有効にする <span class="text-xs text-gray-400 block sm:inline">※処理時間が長くなります</span></span>
+                    </label>
+                </div>
+
+                <input type="file" id="file-input" accept="application/pdf,.pdf" class="hidden">
+            </div>
+        </div>
+
+        <!-- Editor Area (Hidden by default) -->
+        <div id="editor-area" class="hidden">
+            
+            <!-- File Info & Reset -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-100 p-2 rounded-lg">
+                        <svg class="w-6 h-6 text-indigo-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 id="file-name" class="font-bold text-gray-800">filename.pdf</h3>
+                        <p id="page-count-display" class="text-xs text-gray-500">読み込み完了</p>
+                    </div>
+                </div>
+                <button id="reset-btn" class="text-gray-500 hover:text-red-600 text-sm font-medium px-3 py-1 hover:bg-red-50 rounded transition">
+                    別のファイルを開く
+                </button>
+            </div>
+
+            <!-- Text Actions -->
+            <div class="flex justify-end space-x-3 mb-2">
+                <button onclick="copyAllText()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded flex items-center border border-gray-300 transition">
+                    <span class="mr-1">📋</span> 全テキストコピー
+                </button>
+                <button onclick="downloadAllText()" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded flex items-center border border-gray-300 transition">
+                    <span class="mr-1">💾</span> .txt保存
+                </button>
+            </div>
+
+            <!-- Preview & Sort Grid -->
+            <div class="mb-8">
+                <div class="flex justify-between items-end mb-3 px-1">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-800">ページの編集 & テキスト確認</h2>
+                        <p class="text-sm text-gray-500">ドラッグで並べ替え、回転、黒塗り、テキストの編集が可能です。</p>
+                    </div>
+                    <span id="selected-count" class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded"></span>
+                </div>
+                
+                <div id="preview-grid" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 bg-gray-100 p-6 rounded-xl border border-gray-200 min-h-[200px]">
+                    <!-- Preview cards will be injected here -->
+                </div>
+            </div>
+            
+            <!-- OLD DOWNLOAD AREA DELETED -->
+
+        </div>
+
+        <!-- Notification Area -->
+        <div id="notification-area" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none"></div>
+
+        <!-- Masking Editor Modal -->
+        <div id="mask-modal" class="hidden fixed inset-0 z-50 overflow-auto modal-overlay flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="text-lg font-bold text-gray-800">黒塗り編集</h3>
+                    <button onclick="closeMaskModal()" class="text-gray-500 hover:text-gray-700 text-2xl font-bold">&times;</button>
+                </div>
+                <div class="flex-grow overflow-auto p-4 bg-gray-200 flex items-center justify-center relative">
+                    <div class="relative shadow-lg">
+                        <canvas id="mask-canvas" class="cursor-crosshair bg-white max-w-full"></canvas>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-between items-center">
+                    <div class="text-sm text-gray-600">ドラッグして黒塗り範囲を選択してください</div>
+                    <div class="flex space-x-3">
+                        <button onclick="closeMaskModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded transition">キャンセル</button>
+                        <button onclick="applyMask()" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 transition shadow">適用して保存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Overlay -->
+        <div id="progress-container" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <h3 class="text-lg font-bold mb-2">処理中...</h3>
+                <p id="progress-text" class="text-gray-600 text-sm mb-4">準備しています</p>
+                <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                    <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="canvas-container" class="hidden"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const { jsPDF } = window.jspdf;
+
+            let currentPDF = null;
+            let currentFile = null;
+            let sortableInstance = null;
+            
+            // ページ編集・テキストデータの管理
+            const pageEdits = {};
+
+            // Mask Editor Vars
+            let isDrawing = false;
+            let startX = 0;
+            let startY = 0;
+            let currentEditPageIndex = null;
+            const maskCanvas = document.getElementById('mask-canvas');
+            const ctx = maskCanvas.getContext('2d');
+            let tempImage = null;
+
+            // Tesseract Worker (初期化遅延)
+            let ocrWorker = null;
+
+            // --- Notification System ---
+            window.showNotification = function(message, type = 'info') {
+                const container = document.getElementById('notification-area');
+                const el = document.createElement('div');
+                const bgClass = type === 'warning' ? 'bg-orange-100 border-orange-200 text-orange-800' : 
+                                type === 'error' ? 'bg-red-100 border-red-200 text-red-800' : 
+                                type === 'success' ? 'bg-green-100 border-green-200 text-green-800' :
+                                'bg-white border-gray-200 text-gray-800';
+                const borderClass = type === 'warning' ? 'border-l-4 border-orange-500' : 
+                                    type === 'error' ? 'border-l-4 border-red-500' : 
+                                    type === 'success' ? 'border-l-4 border-green-500' :
+                                    'border-l-4 border-indigo-500';
+                
+                el.className = `${bgClass} ${borderClass} px-4 py-3 rounded shadow-lg flex items-center justify-between min-w-[300px] toast-enter pointer-events-auto border`;
+                el.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${type === 'success' ? '✅' : type === 'warning' ? '⚠️' : type === 'error' ? '❌' : 'ℹ️'}</span>
+                        <span class="text-sm font-medium">${message}</span>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="ml-4 text-gray-500 hover:text-gray-800 font-bold">&times;</button>
+                `;
+                
+                container.appendChild(el);
+                
+                setTimeout(() => {
+                    if(el.parentElement) {
+                        el.style.transition = 'all 0.3s ease-out';
+                        el.style.opacity = '0';
+                        el.style.transform = 'translateX(100%)';
+                        setTimeout(() => el.remove(), 300);
+                    }
+                }, 5000);
+            }
+
+            // --- Menu Toggle Logic ---
+            window.toggleMenu = function() {
+                const menu = document.getElementById('download-menu');
+                menu.classList.toggle('hidden');
+                
+                if(!menu.classList.contains('hidden')) {
+                    menu.classList.add('menu-enter');
+                    menu.classList.remove('menu-enter-active');
+                    requestAnimationFrame(() => {
+                        menu.classList.add('menu-enter-active');
+                        menu.classList.remove('menu-enter');
+                    });
+                }
+            }
+            
+            // Toggle SVG Note REMOVED
+
+            // Close menu when clicking outside
+            document.addEventListener('click', (e) => {
+                const menu = document.getElementById('download-menu');
+                const btn = document.getElementById('menu-btn');
+                if (!menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
+                    menu.classList.add('hidden');
+                }
+            });
+
+            // --- Drag and Drop Logic ---
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+
+            dropZone.addEventListener('click', (e) => {
+                if (e.target.tagName === 'LABEL' || e.target.closest('label')) return;
+                fileInput.click();
+            });
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => dropZone.classList.add('drag-active'));
+            ['dragleave', 'drop'].forEach(eventName => dropZone.classList.remove('drag-active'));
+
+            dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files), false);
+            fileInput.addEventListener('change', e => handleFiles(e.target.files), false);
+
+            function handleFiles(files) {
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    loadPDF(files[0]);
+                } else {
+                    alert('PDFファイルを選択してください。');
+                }
+            }
+
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                currentPDF = null;
+                currentFile = null;
+                Object.keys(pageEdits).forEach(key => delete pageEdits[key]);
+                document.getElementById('editor-area').classList.add('hidden');
+                document.getElementById('drop-zone').classList.remove('hidden');
+                document.getElementById('preview-grid').innerHTML = '';
+                fileInput.value = '';
+                
+                // OCR Worker終了（リソース解放）
+                if (ocrWorker) {
+                    ocrWorker.terminate();
+                    ocrWorker = null;
+                }
+            });
+
+            // --- PDF Loading & Text Extraction ---
+            window.loadPDF = async function(file) {
+                try {
+                    showProgress(0, 'PDFを読み込んでいます...');
+                    const arrayBuffer = await file.arrayBuffer();
+                    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                    currentPDF = await loadingTask.promise;
+                    currentFile = file;
+
+                    document.getElementById('file-name').textContent = file.name;
+                    document.getElementById('drop-zone').classList.add('hidden');
+                    document.getElementById('editor-area').classList.remove('hidden');
+
+                    await generatePreviewsAndExtractText();
+                    hideProgress();
+                } catch (error) {
+                    console.error(error);
+                    alert('PDF読み込みエラー: ' + error.message);
+                    hideProgress();
+                }
+            };
+
+            async function generatePreviewsAndExtractText() {
+                const container = document.getElementById('preview-grid');
+                container.innerHTML = '';
+                const totalPages = currentPDF.numPages;
+                const enableOCR = document.getElementById('enable-ocr').checked;
+
+                let workerReady = false;
+                
+                for (let i = 1; i <= totalPages; i++) {
+                    if (!pageEdits[i]) pageEdits[i] = { rotation: 0, customImage: null, text: "" };
+
+                    updateProgress((i / totalPages) * 100, `ページ解析中: ${i}/${totalPages}...`);
+                    
+                    const canvas = await renderPage(i, 0.4, 0); 
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+                    let extractedText = "";
+                    try {
+                        const page = await currentPDF.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const embeddedText = textContent.items.map(item => item.str).join(" ");
+                        
+                        // Check if OCR is enabled AND text is too short
+                        if (enableOCR && embeddedText.replace(/\s/g, '').length < 10) {
+                            updateProgress((i / totalPages) * 100, `高精度OCR解析中 (ページ ${i})...`);
+                            
+                            if (!workerReady) {
+                                if (!ocrWorker) ocrWorker = await Tesseract.createWorker('jpn+eng');
+                                workerReady = true;
+                            }
+                            
+                            const ocrCanvas = await renderPage(i, 3.0, 0);
+                            const { data: { text } } = await ocrWorker.recognize(ocrCanvas);
+                            extractedText = text;
+                        } else {
+                            extractedText = embeddedText;
+                        }
+                    } catch (e) {
+                        console.warn(`Page ${i} text extraction failed`, e);
+                        extractedText = "(テキスト抽出エラー)";
+                    }
+
+                    pageEdits[i].text = extractedText.trim();
+                    const card = createPageCard(i, dataUrl, pageEdits[i].text);
+                    container.appendChild(card);
+                }
+
+                if (sortableInstance) sortableInstance.destroy();
+                sortableInstance = new Sortable(container, {
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    handle: '.card-image',
+                    onEnd: updateCount
+                });
+                updateCount();
+            }
+
+            function createPageCard(pageIndex, imageUrl, text) {
+                const card = document.createElement('div');
+                card.className = 'page-card bg-white p-3 rounded shadow border border-gray-200 relative group flex flex-col';
+                card.dataset.pageIndex = pageIndex;
+                card.id = `card-${pageIndex}`;
+
+                const imgContainer = document.createElement('div');
+                imgContainer.className = 'card-image relative w-full mb-2 cursor-move rounded border border-gray-100 bg-gray-50';
+                
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.className = 'w-full h-40 object-contain transition-transform duration-200';
+                img.id = `img-${pageIndex}`;
+                imgContainer.appendChild(img);
+
+                const tools = document.createElement('div');
+                tools.className = 'flex justify-between items-center mb-2';
+                
+                const label = document.createElement('span');
+                label.className = 'text-xs text-gray-500 font-bold';
+                label.textContent = `P.${pageIndex}`;
+                
+                const buttons = document.createElement('div');
+                buttons.className = 'flex space-x-1';
+                
+                const rotateBtn = document.createElement('button');
+                rotateBtn.innerHTML = '🔄';
+                rotateBtn.className = 'p-1 hover:bg-gray-100 rounded text-sm';
+                rotateBtn.title = '回転';
+                rotateBtn.onclick = () => rotatePage(pageIndex);
+
+                const editBtn = document.createElement('button');
+                editBtn.innerHTML = '✏️';
+                editBtn.className = 'p-1 hover:bg-gray-100 rounded text-sm';
+                editBtn.title = '黒塗り';
+                editBtn.onclick = () => openMaskModal(pageIndex);
+
+                buttons.appendChild(rotateBtn);
+                buttons.appendChild(editBtn);
+                tools.appendChild(label);
+                tools.appendChild(buttons);
+
+                const textArea = document.createElement('textarea');
+                textArea.className = 'w-full h-24 text-xs border border-gray-200 rounded p-1 resize-none focus:ring-1 focus:ring-indigo-500 focus:outline-none bg-gray-50';
+                textArea.placeholder = "テキストなし";
+                textArea.value = text;
+                textArea.onchange = (e) => {
+                    pageEdits[pageIndex].text = e.target.value;
+                };
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-red-600 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10';
+                delBtn.innerHTML = '×';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    card.remove();
+                    updateCount();
+                };
+
+                card.appendChild(imgContainer);
+                card.appendChild(tools);
+                card.appendChild(textArea);
+                card.appendChild(delBtn);
+
+                return card;
+            }
+
+            // Global exposure for onclick
+            window.copyAllText = function() {
+                const cards = Array.from(document.querySelectorAll('.page-card'));
+                let fullText = "";
+                cards.forEach(card => {
+                    const idx = parseInt(card.dataset.pageIndex);
+                    fullText += `--- Page ${idx} ---\n`;
+                    fullText += pageEdits[idx].text + "\n\n";
+                });
+                navigator.clipboard.writeText(fullText).then(() => {
+                    showNotification('全テキストをクリップボードにコピーしました', 'success');
+                });
+            }
+
+            window.downloadAllText = function() {
+                const cards = Array.from(document.querySelectorAll('.page-card'));
+                let fullText = "";
+                cards.forEach(card => {
+                    const idx = parseInt(card.dataset.pageIndex);
+                    fullText += `--- Page ${idx} ---\n`;
+                    fullText += pageEdits[idx].text + "\n\n";
+                });
+                const blob = new Blob([fullText], {type: "text/plain;charset=utf-8"});
+                saveAs(blob, `${currentFile.name.replace('.pdf', '')}_extracted.txt`);
+                showNotification('テキストファイルの保存が完了しました', 'success');
+            }
+
+            window.rotatePage = async function(pageIndex) {
+                const state = pageEdits[pageIndex];
+                if (state.customImage) {
+                    const img = new Image();
+                    img.src = state.customImage;
+                    await new Promise(r => img.onload = r);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.height;
+                    canvas.height = img.width;
+                    const ctx = canvas.getContext('2d');
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    ctx.rotate(90 * Math.PI / 180);
+                    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                    state.customImage = canvas.toDataURL('image/png');
+                    document.getElementById(`img-${pageIndex}`).src = state.customImage;
+                } else {
+                    state.rotation = (state.rotation + 90) % 360;
+                    document.getElementById(`img-${pageIndex}`).style.transform = `rotate(${state.rotation}deg)`;
+                }
+            }
+
+            window.openMaskModal = async function(pageIndex) {
+                currentEditPageIndex = pageIndex;
+                const state = pageEdits[pageIndex];
+                showProgress(0, '編集用に高画質化しています...');
+                try {
+                    let baseDataUrl;
+                    if (state.customImage) {
+                        baseDataUrl = state.customImage;
+                    } else {
+                        const canvas = await renderPage(pageIndex, 2.0, state.rotation); 
+                        baseDataUrl = canvas.toDataURL('image/png');
+                    }
+                    tempImage = new Image();
+                    tempImage.onload = () => {
+                        maskCanvas.width = tempImage.width;
+                        maskCanvas.height = tempImage.height;
+                        ctx.drawImage(tempImage, 0, 0);
+                        document.getElementById('mask-modal').classList.remove('hidden');
+                        hideProgress();
+                    };
+                    tempImage.src = baseDataUrl;
+                } catch (e) {
+                    console.error(e);
+                    alert('画像準備エラー');
+                    hideProgress();
+                }
+            }
+
+            window.closeMaskModal = function() {
+                document.getElementById('mask-modal').classList.add('hidden');
+                currentEditPageIndex = null;
+            }
+
+            maskCanvas.addEventListener('mousedown', e => {
+                isDrawing = true;
+                const rect = maskCanvas.getBoundingClientRect();
+                const scaleX = maskCanvas.width / rect.width;
+                const scaleY = maskCanvas.height / rect.height;
+                startX = (e.clientX - rect.left) * scaleX;
+                startY = (e.clientY - rect.top) * scaleY;
+            });
+
+            maskCanvas.addEventListener('mousemove', e => {
+                if (!isDrawing) return;
+                const rect = maskCanvas.getBoundingClientRect();
+                const scaleX = maskCanvas.width / rect.width;
+                const scaleY = maskCanvas.height / rect.height;
+                const currentX = (e.clientX - rect.left) * scaleX;
+                const currentY = (e.clientY - rect.top) * scaleY;
+                ctx.drawImage(tempImage, 0, 0);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(startX, startY, currentX - startX, currentY - startY);
+            });
+
+            maskCanvas.addEventListener('mouseup', e => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                const rect = maskCanvas.getBoundingClientRect();
+                const scaleX = maskCanvas.width / rect.width;
+                const scaleY = maskCanvas.height / rect.height;
+                const currentX = (e.clientX - rect.left) * scaleX;
+                const currentY = (e.clientY - rect.top) * scaleY;
+                ctx.drawImage(tempImage, 0, 0);
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(startX, startY, currentX - startX, currentY - startY);
+                tempImage.src = maskCanvas.toDataURL();
+            });
+
+            window.applyMask = function() {
+                if (!currentEditPageIndex) return;
+                const newDataUrl = maskCanvas.toDataURL('image/png');
+                const state = pageEdits[currentEditPageIndex];
+                state.customImage = newDataUrl;
+                state.rotation = 0; 
+                const imgEl = document.getElementById(`img-${currentEditPageIndex}`);
+                imgEl.src = newDataUrl;
+                imgEl.style.transform = 'none';
+                closeMaskModal();
+            }
+
+            // getSVGData REMOVED
+
+            window.convertPDF = async function(type) {
+                if (!currentPDF) return;
+                // Close menu if open
+                const menu = document.getElementById('download-menu');
+                if(!menu.classList.contains('hidden')) {
+                    menu.classList.add('hidden');
+                }
+
+                const cards = Array.from(document.querySelectorAll('.page-card'));
+                if (cards.length === 0) {
+                    alert('出力するページがありません。');
+                    return;
+                }
+                showProgress(0, '処理を開始します...');
+                try {
+                    const totalProcessing = cards.length;
+                    const images = [];
+                    for (let i = 0; i < totalProcessing; i++) {
+                        const card = cards[i];
+                        const originalPageIndex = parseInt(card.dataset.pageIndex);
+                        const state = pageEdits[originalPageIndex];
+                        updateProgress((i / totalProcessing) * 50, `画像処理中: ${i+1}/${totalProcessing}...`);
+                        
+                        let imgData, width, height, originalW, originalH;
+                        if (state.customImage) {
+                            imgData = state.customImage;
+                            const img = new Image();
+                            img.src = imgData;
+                            await new Promise(r => img.onload = r);
+                            width = img.width;
+                            height = img.height;
+                            originalW = width;
+                            originalH = height;
+                        } else {
+                            const canvas = await renderPage(originalPageIndex, 2.0, state.rotation);
+                            imgData = canvas.toDataURL('image/png');
+                            width = canvas.width;
+                            height = canvas.height;
+                            originalW = canvas.dataset.originalWidth;
+                            originalH = canvas.dataset.originalHeight;
+                        }
+                        images.push({
+                            data: imgData,
+                            width: width,
+                            height: height,
+                            originalWidth: originalW,
+                            originalHeight: originalH,
+                            text: state.text 
+                        });
+                    }
+                    updateProgress(60, 'ファイル生成中...');
+                    if (type === 'png') await createZip(images);
+                    else if (type === 'pptx') await createPptx(images);
+                    else if (type === 'gif') await createGif(images);
+                    else if (type === 'pdf') await createPdf(images);
+                } catch (error) {
+                    console.error(error);
+                    alert(`エラーが発生しました: ${error.message}`);
+                } finally {
+                    hideProgress();
+                }
+            }
+
+            async function renderPage(pageNumber, scale, rotation = 0) {
+                const page = await currentPDF.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: scale, rotation: rotation });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                const viewportDefault = page.getViewport({ scale: 1.0, rotation: rotation });
+                canvas.dataset.originalWidth = viewportDefault.width;
+                canvas.dataset.originalHeight = viewportDefault.height;
+                const renderContext = { canvasContext: context, viewport: viewport };
+                await page.render(renderContext).promise;
+                return canvas;
+            }
+
+            function updateCount() {
+                const count = document.getElementById('preview-grid').children.length;
+                document.getElementById('selected-count').textContent = `${count} ページ出力`;
+            }
+
+            async function createPdf(images) {
+                const doc = new jsPDF({
+                    orientation: images[0].width > images[0].height ? 'l' : 'p',
+                    unit: 'px',
+                    format: [images[0].width, images[0].height]
+                });
+                images.forEach((img, index) => {
+                    if (index > 0) doc.addPage([img.width, img.height], img.width > img.height ? 'l' : 'p');
+                    doc.addImage(img.data, 'JPEG', 0, 0, img.width, img.height, null, 'FAST');
+                });
+                updateProgress(90, 'PDF保存中...');
+                doc.save(`${currentFile.name.replace('.pdf', '')}_edited.pdf`);
+                showNotification('PDFファイルの保存が完了しました', 'success');
+            }
+
+            async function createZip(images) {
+                const zip = new JSZip();
+                const folder = zip.folder("pdf_images");
+                images.forEach((img, index) => {
+                    const base64Data = img.data.replace(/^data:image\/png;base64,/, "");
+                    const fileName = `page_${String(index + 1).padStart(3, '0')}.png`;
+                    folder.file(fileName, base64Data, {base64: true});
+                });
+                updateProgress(90, 'ZIP圧縮中...');
+                const content = await zip.generateAsync({type: "blob"});
+                saveAs(content, `${currentFile.name.replace('.pdf', '')}_images.zip`);
+                showNotification('画像(ZIP)の保存が完了しました', 'success');
+            }
+
+            async function createPptx(images) {
+                const pres = new PptxGenJS();
+                const hideLogo = document.getElementById('pptx-hide-logo').checked;
+                const maskColorHex = document.getElementById('pptx-mask-color').value.replace('#', '');
+                const addNotes = document.getElementById('pptx-speaker-notes').checked;
+
+                if (images.length > 0) {
+                    const getInches = (img) => {
+                        if (img.originalWidth && !isNaN(img.originalWidth)) {
+                            return { w: img.originalWidth / 72, h: img.originalHeight / 72 };
+                        } else {
+                            return { w: img.width / 144, h: img.height / 144 };
+                        }
+                    };
+                    const firstSize = getInches(images[0]);
+                    pres.defineLayout({ name:'PDF_SIZE', width: firstSize.w, height: firstSize.h });
+                    pres.layout = 'PDF_SIZE';
+
+                    images.forEach((img, i) => {
+                        const slide = pres.addSlide();
+                        slide.addImage({ data: img.data, x: 0, y: 0, w: '100%', h: '100%' });
+
+                        if (hideLogo) {
+                            const size = getInches(img);
+                            const boxW = size.w * 0.08;
+                            const boxH = size.h * 0.03;
+                            slide.addShape(pres.ShapeType.rect, {
+                                x: size.w - boxW, y: size.h - boxH, w: boxW, h: boxH,
+                                fill: { color: maskColorHex }, line: { width: 0, color: maskColorHex }
+                            });
+                        }
+                        
+                        if (addNotes && img.text) {
+                            slide.addNotes(img.text);
+                        }
+                    });
+                }
+                
+                updateProgress(95, 'PPTX保存中...');
+                await pres.writeFile({ fileName: `${currentFile.name.replace('.pdf', '')}.pptx` });
+                showNotification('PowerPointの保存が完了しました。', 'success');
+            }
+
+            async function createGif(images) {
+                return new Promise(async (resolve, reject) => {
+                    updateProgress(80, 'GIF準備中...');
+                    const intervalSec = parseFloat(document.getElementById('gif-interval').value) || 1.5;
+                    const delayMs = intervalSec * 1000;
+                    try {
+                        const response = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+                        if (!response.ok) throw new Error('Worker fetch failed');
+                        const workerBlob = await response.blob();
+                        const workerUrl = URL.createObjectURL(workerBlob);
+                        const gif = new GIF({
+                            workers: 2, quality: 10, width: images[0].width, height: images[0].height, workerScript: workerUrl
+                        });
+                        const imgEls = await Promise.all(images.map(imgData => {
+                            return new Promise((res, rej) => {
+                                const i = new Image();
+                                i.onload = () => res(i);
+                                i.onerror = rej;
+                                i.src = imgData.data;
+                            });
+                        }));
+                        imgEls.forEach(i => gif.addFrame(i, {delay: delayMs}));
+                        gif.on('finished', blob => {
+                            saveAs(blob, `${currentFile.name.replace('.pdf', '')}.gif`);
+                            URL.revokeObjectURL(workerUrl);
+                            showNotification('GIFアニメの保存が完了しました', 'success');
+                            resolve();
+                        });
+                        gif.on('progress', p => updateProgress(80 + (p * 20), `GIFエンコード: ${Math.round(p*100)}%`));
+                        gif.render();
+                    } catch (e) { reject(e); }
+                });
+            }
+
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+
+            function showProgress(percent, text) {
+                progressContainer.classList.remove('hidden');
+                updateProgress(percent, text);
+            }
+            function updateProgress(percent, text) {
+                progressBar.style.width = `${percent}%`;
+                if (text) progressText.textContent = text;
+            }
+            function hideProgress() {
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    progressBar.style.width = '0%';
+                }, 500);
+            }
+        });
+    </script>
+</body>
+</html>
