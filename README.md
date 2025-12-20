@@ -1,0 +1,2 @@
+# pdfconverter
+PDFマルチコンバーター　NotebookLMのPDF形式のスライドをPowerPoint形式（画像データ）に変換できます
