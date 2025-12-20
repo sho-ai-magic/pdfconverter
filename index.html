@@ -34,6 +34,7 @@
         body {
             font-family: 'Noto Sans JP', sans-serif;
             overflow-x: hidden;
+            padding-top: 80px; /* Space for fixed header */
         }
         .custom-scrollbar::-webkit-scrollbar {
             height: 8px;
@@ -89,24 +90,29 @@
 </head>
 <body class="bg-gray-50 min-h-screen text-gray-800">
 
-    <div class="container mx-auto px-4 py-6 max-w-6xl">
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-6 border-b border-gray-200 gap-4 relative">
-            <div class="w-full sm:w-auto">
-                <h1 class="text-xl sm:text-2xl font-bold text-indigo-600 flex items-center gap-2">
-                    <span class="text-2xl sm:text-3xl">📄</span> PDF変換・編集ツール
-                </h1>
-                <p class="text-[10px] sm:text-xs text-gray-500 mt-1 font-medium">並べ替え・回転・黒塗り・OCR・各種変換</p>
+    <!-- Fixed Header -->
+    <header class="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md border-b border-gray-200 z-50 shadow-sm transition-all duration-300">
+        <div class="container mx-auto px-4 h-16 flex items-center justify-between max-w-6xl">
+            
+            <!-- Title -->
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="text-2xl sm:text-3xl flex-shrink-0">📄</span>
+                <div class="truncate">
+                    <h1 class="text-lg sm:text-xl font-bold text-indigo-600 truncate">PDF変換ツール</h1>
+                    <p class="text-[9px] sm:text-xs text-gray-500 hidden sm:block">並べ替え・回転・黒塗り・OCR・各種変換</p>
+                </div>
             </div>
 
-            <div class="relative w-full sm:w-auto flex justify-end">
-                <button id="menu-btn" onclick="toggleMenu()" class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 font-bold z-50 relative whitespace-nowrap text-sm sm:text-base">
-                    <span class="text-lg sm:text-xl">📥</span>
-                    <span>保存・書き出し</span>
-                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            <!-- Menu Button & Dropdown -->
+            <div class="relative flex-shrink-0">
+                <button id="menu-btn" onclick="toggleMenu()" class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-md hover:shadow-lg transition-all active:scale-95 font-bold">
+                    <span class="text-xl">📥</span>
+                    <span class="hidden sm:inline text-sm">保存・書き出し</span>
+                    <svg class="w-4 h-4 hidden sm:inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </button>
 
-                <div id="download-menu" class="hidden absolute right-0 top-full mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 z-40 origin-top-right transform transition-all duration-200">
+                <!-- Dropdown -->
+                <div id="download-menu" class="hidden absolute right-0 top-full mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 z-50 origin-top-right transform transition-all duration-200">
                     <div class="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
                         <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Download Options</span>
                         <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -191,10 +197,12 @@
                     </div>
                 </div>
             </div>
-        </header>
+        </div>
+    </header>
 
+    <div class="container mx-auto px-4 pb-20 max-w-6xl">
         <!-- Drop Zone -->
-        <div id="drop-zone" class="bg-white border-2 border-dashed border-gray-300 rounded-xl p-8 sm:p-12 text-center cursor-pointer transition-colors duration-200 hover:border-indigo-400 mb-8 shadow-sm">
+        <div id="drop-zone" class="bg-white border-2 border-dashed border-gray-300 rounded-xl p-8 sm:p-12 text-center cursor-pointer transition-colors duration-200 hover:border-indigo-400 mb-8 shadow-sm mt-4">
             <div class="flex flex-col items-center justify-center space-y-4">
                 <svg class="w-12 h-12 sm:w-16 sm:h-16 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -220,7 +228,7 @@
         </div>
 
         <!-- Editor Area (Hidden by default) -->
-        <div id="editor-area" class="hidden animate-in fade-in duration-500">
+        <div id="editor-area" class="hidden animate-in fade-in duration-500 mt-4">
             <!-- File Info Bar -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex items-center space-x-3 overflow-hidden">
@@ -257,7 +265,7 @@
                     </div>
                 </div>
                 
-                <!-- PREVIEW GRID: Changed grid-cols-2 to grid-cols-1 for mobile -->
+                <!-- PREVIEW GRID -->
                 <div id="preview-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 bg-gray-100/50 p-4 sm:p-6 rounded-2xl border border-gray-200 min-h-[200px]">
                     <!-- Preview cards will be injected here -->
                 </div>
@@ -441,7 +449,6 @@
                 div.className = 'page-card bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col relative group';
                 div.dataset.pageIndex = idx;
                 div.id = `card-${idx}`;
-                // Changed h-44 to sm:h-44 and added h-64 for mobile to fill space better in 1-column layout
                 div.innerHTML = `
                     <div class="drag-handle relative w-full mb-4 cursor-grab active:cursor-grabbing rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 shadow-inner">
                         <img src="${img}" id="img-${idx}" class="w-full h-64 sm:h-44 object-contain transition-transform">
@@ -484,7 +491,7 @@
 
             window.openMaskModal = async function(idx) {
                 currentEditPageIndex = idx;
-                showProgress(0, '高画質化して準備中...');
+                showProgress(0, '編集準備中...');
                 const state = pageEdits[idx];
                 const can = await renderPageToCanvas(idx, 2.0, state.rotation);
                 tempImage = new Image();
@@ -587,7 +594,7 @@
                 pages.forEach(p => {
                     const s = pres.addSlide();
                     s.addImage({ data: p.data, x: 0, y: 0, w: '100%', h: '100%' });
-                    if(hideLogo) s.addShape(pres.ShapeType.rect, { x: (p.ow/72)*0.9, y: (p.oh/72)*0.95, w: (p.ow/72)*0.1, h: (p.oh/72)*0.05, fill: {color} });
+                    if(hideLogo) s.addShape(pres.ShapeType.rect, { x: (p.ow/72)*0.92, y: (p.oh/72)*0.97, w: (p.ow/72)*0.08, h: (p.oh/72)*0.03, fill: {color}, line: {width:0, color:color} });
                     if(notes && p.text) s.addNotes(p.text);
                 });
                 await pres.writeFile({ fileName: `${currentFile.name.replace('.pdf','')}.pptx` });
