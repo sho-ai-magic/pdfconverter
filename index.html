@@ -34,7 +34,7 @@
         body {
             font-family: 'Noto Sans JP', sans-serif;
             overflow-x: hidden;
-            padding-top: 80px; /* Space for fixed header */
+            padding-top: 80px;
         }
         .custom-scrollbar::-webkit-scrollbar {
             height: 8px;
@@ -197,10 +197,8 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </header>
+        </header>
 
-    <div class="container mx-auto px-4 pb-20 max-w-6xl">
         <!-- Drop Zone -->
         <div id="drop-zone" class="bg-white border-2 border-dashed border-gray-300 rounded-xl p-8 sm:p-12 text-center cursor-pointer transition-colors duration-200 hover:border-indigo-400 mb-8 shadow-sm mt-4">
             <div class="flex flex-col items-center justify-center space-y-4">
@@ -321,7 +319,9 @@
             let currentPDF = null;
             let currentFile = null;
             let sortableInstance = null;
-            const pageEdits = {};
+            
+            // GLOBAL VARIABLES
+            window.pageEdits = {};
 
             // Masking Vars
             let isDrawing = false;
@@ -547,17 +547,39 @@
                         const origIdx = parseInt(cards[i].dataset.pageIndex);
                         const state = pageEdits[origIdx];
                         updateProgress(10 + (i/cards.length)*50, `加工中... ${i+1}/${cards.length}`);
-                        let data, w, h, ow, oh;
+                        let data, w, h, ow, oh, format = 'PNG';
+                        
                         if(state.customImage){
+                            // Edited images are PNG
                             data = state.customImage;
-                            const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
-                            w = img.width; h = img.height; ow = w; oh = h;
+                            if(type === 'pdf') {
+                                // For PDF size reduction, re-compress edited images as JPEG
+                                const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
+                                const tmpCan = document.createElement('canvas'); tmpCan.width = img.width; tmpCan.height = img.height;
+                                tmpCan.getContext('2d').drawImage(img, 0, 0);
+                                data = tmpCan.toDataURL('image/jpeg', 0.75); // Compress edited image
+                                format = 'JPEG';
+                                w = img.width; h = img.height; ow = w; oh = h;
+                            } else {
+                                const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
+                                w = img.width; h = img.height; ow = w; oh = h;
+                            }
                         } else {
-                            const can = await renderPageToCanvas(origIdx, 2.0, state.rotation);
-                            data = can.toDataURL('image/png');
-                            w = can.width; h = can.height; ow = can.dataset.ow; oh = can.dataset.oh;
+                            // Direct from PDF
+                            if(type === 'pdf') {
+                                // JPEG compression for PDF re-building to reduce size
+                                const can = await renderPageToCanvas(origIdx, 2.0, state.rotation);
+                                data = can.toDataURL('image/jpeg', 0.75); // 75% Quality JPEG
+                                format = 'JPEG';
+                                w = can.width; h = can.height; ow = can.dataset.ow; oh = can.dataset.oh;
+                            } else {
+                                // PNG for others (High Quality)
+                                const can = await renderPageToCanvas(origIdx, 2.0, state.rotation);
+                                data = can.toDataURL('image/png');
+                                w = can.width; h = can.height; ow = can.dataset.ow; oh = can.dataset.oh;
+                            }
                         }
-                        pages.push({ data, w, h, ow, oh, text: state.text });
+                        pages.push({ data, w, h, ow, oh, text: state.text, format });
                     }
                     if(type === 'pdf') await buildPdf(pages);
                     else if(type === 'png') await buildZip(pages);
@@ -569,10 +591,17 @@
 
             // --- Exporters ---
             async function buildPdf(pages) {
-                const doc = new jsPDF({ orientation: pages[0].w > pages[0].h ? 'l' : 'p', unit: 'px', format: [pages[0].w, pages[0].h] });
+                // Ensure jsPDF uses compression
+                const doc = new jsPDF({ 
+                    orientation: pages[0].w > pages[0].h ? 'l' : 'p', 
+                    unit: 'px', 
+                    format: [pages[0].w, pages[0].h],
+                    compress: true 
+                });
                 pages.forEach((p, i) => {
                     if(i > 0) doc.addPage([p.w, p.h], p.w > p.h ? 'l' : 'p');
-                    doc.addImage(p.data, 'PNG', 0, 0, p.w, p.h);
+                    // Use correct format (JPEG) for size reduction
+                    doc.addImage(p.data, p.format || 'PNG', 0, 0, p.w, p.h, undefined, 'FAST');
                 });
                 doc.save(`${currentFile.name.replace('.pdf', '')}_edited.pdf`);
                 showNotification('PDFの保存完了', 'success');
@@ -629,10 +658,13 @@
                 const txt = Array.from(document.querySelectorAll('.page-card textarea')).map((t, i) => `[P${i+1}]\n${t.value}`).join('\n\n');
                 saveAs(new Blob([txt], {type:'text/plain'}), 'extracted.txt');
             };
-            function updateCount() {
+            
+            // GLOBAL FUNCTION for onclick access
+            window.updateCount = function() {
                 const c = document.getElementById('preview-grid').children.length;
                 document.getElementById('selected-count').textContent = `${c} ページ`;
             }
+            
             function showProgress(val, txt) {
                 document.getElementById('progress-container').classList.remove('hidden');
                 updateProgress(val, txt);
