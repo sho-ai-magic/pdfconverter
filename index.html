@@ -185,10 +185,18 @@
                                     <p class="text-[9px] text-gray-500">パラパラ漫画風</p>
                                 </div>
                             </div>
-                            <div class="bg-white rounded border border-gray-100 p-1.5 mb-2 text-[10px] flex items-center justify-center gap-2">
-                                <span class="text-gray-600 font-medium">間隔:</span>
-                                <input type="number" id="gif-interval" value="1.5" min="0.1" step="0.1" class="w-10 py-0.5 text-center border border-gray-300 rounded text-gray-700">
-                                <span class="text-gray-500">秒</span>
+                            <div class="bg-white rounded border border-gray-100 p-2 mb-2 text-[10px] space-y-1.5">
+                                <div class="flex items-center justify-center gap-2">
+                                    <span class="text-gray-600 font-medium">間隔:</span>
+                                    <input type="number" id="gif-interval" value="1.5" min="0.1" step="0.1" class="w-10 py-0.5 text-center border border-gray-300 rounded text-gray-700">
+                                    <span class="text-gray-500">秒</span>
+                                </div>
+                                <div class="flex items-center justify-center border-t border-gray-100 pt-1.5">
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="checkbox" id="gif-compress" class="rounded text-green-500 focus:ring-green-500 w-3 h-3 border-gray-300">
+                                        <span class="ml-1.5 text-gray-600 font-medium">画像を圧縮する</span>
+                                    </label>
+                                </div>
                             </div>
                             <button onclick="convertPDF('gif')" class="w-full py-1.5 bg-white border border-gray-200 text-green-600 text-[11px] font-bold rounded-lg hover:bg-green-500 hover:text-white transition-colors shadow-sm">
                                 GIF生成
@@ -543,38 +551,49 @@
                 showProgress(10, '処理中...');
                 try {
                     const pages = [];
+                    // Check GIF compress option
+                    const gifCompress = document.getElementById('gif-compress') ? document.getElementById('gif-compress').checked : false;
+
                     for(let i=0; i<cards.length; i++){
                         const origIdx = parseInt(cards[i].dataset.pageIndex);
                         const state = pageEdits[origIdx];
                         updateProgress(10 + (i/cards.length)*50, `加工中... ${i+1}/${cards.length}`);
                         let data, w, h, ow, oh, format = 'PNG';
                         
+                        let scale = 2.0;
+                        if (type === 'gif' && gifCompress) {
+                            scale = 0.8; // Lower scale for GIF compression
+                        }
+
                         if(state.customImage){
-                            // Edited images are PNG
                             data = state.customImage;
+                            const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
+                            
+                            // Re-compress edited images if needed
                             if(type === 'pdf') {
-                                // For PDF size reduction, re-compress edited images as JPEG
-                                const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
                                 const tmpCan = document.createElement('canvas'); tmpCan.width = img.width; tmpCan.height = img.height;
                                 tmpCan.getContext('2d').drawImage(img, 0, 0);
-                                data = tmpCan.toDataURL('image/jpeg', 0.75); // Compress edited image
+                                data = tmpCan.toDataURL('image/jpeg', 0.75);
                                 format = 'JPEG';
                                 w = img.width; h = img.height; ow = w; oh = h;
+                            } else if (type === 'gif' && gifCompress) {
+                                // Downscale custom image for GIF
+                                const tmpCan = document.createElement('canvas'); 
+                                tmpCan.width = img.width * 0.4; tmpCan.height = img.height * 0.4; // rough downscale
+                                tmpCan.getContext('2d').drawImage(img, 0, 0, tmpCan.width, tmpCan.height);
+                                data = tmpCan.toDataURL('image/png');
+                                w = tmpCan.width; h = tmpCan.height; ow = img.width; oh = img.height;
                             } else {
-                                const img = new Image(); img.src = data; await new Promise(r => img.onload = r);
                                 w = img.width; h = img.height; ow = w; oh = h;
                             }
                         } else {
-                            // Direct from PDF
                             if(type === 'pdf') {
-                                // JPEG compression for PDF re-building to reduce size
                                 const can = await renderPageToCanvas(origIdx, 2.0, state.rotation);
-                                data = can.toDataURL('image/jpeg', 0.75); // 75% Quality JPEG
+                                data = can.toDataURL('image/jpeg', 0.75);
                                 format = 'JPEG';
                                 w = can.width; h = can.height; ow = can.dataset.ow; oh = can.dataset.oh;
                             } else {
-                                // PNG for others (High Quality)
-                                const can = await renderPageToCanvas(origIdx, 2.0, state.rotation);
+                                const can = await renderPageToCanvas(origIdx, scale, state.rotation);
                                 data = can.toDataURL('image/png');
                                 w = can.width; h = can.height; ow = can.dataset.ow; oh = can.dataset.oh;
                             }
@@ -591,16 +610,9 @@
 
             // --- Exporters ---
             async function buildPdf(pages) {
-                // Ensure jsPDF uses compression
-                const doc = new jsPDF({ 
-                    orientation: pages[0].w > pages[0].h ? 'l' : 'p', 
-                    unit: 'px', 
-                    format: [pages[0].w, pages[0].h],
-                    compress: true 
-                });
+                const doc = new jsPDF({ orientation: pages[0].w > pages[0].h ? 'l' : 'p', unit: 'px', format: [pages[0].w, pages[0].h], compress: true });
                 pages.forEach((p, i) => {
                     if(i > 0) doc.addPage([p.w, p.h], p.w > p.h ? 'l' : 'p');
-                    // Use correct format (JPEG) for size reduction
                     doc.addImage(p.data, p.format || 'PNG', 0, 0, p.w, p.h, undefined, 'FAST');
                 });
                 doc.save(`${currentFile.name.replace('.pdf', '')}_edited.pdf`);
